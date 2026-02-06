@@ -4,14 +4,14 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const db = require('./database');
+const db = require('./database-supabase');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const KEYS_FILE = path.join(__dirname, 'keys.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
-let USE_MONGODB = false;
+let USE_DATABASE = false;
 
 app.use(cors());
 app.use(express.json());
@@ -19,9 +19,10 @@ app.use(express.static(__dirname));
 
 // Inicializar banco de dados
 async function initDB() {
-  USE_MONGODB = await db.connectDB();
-  if (USE_MONGODB) {
-    console.log('✅ Usando MongoDB como banco de dados');
+  USE_DATABASE = db.connectDB();
+  if (USE_DATABASE) {
+    console.log('✅ Usando Supabase/PostgreSQL como banco de dados');
+    await db.testConnection();
   } else {
     console.log('⚠️  Usando keys.json como banco de dados (fallback)');
   }
@@ -42,16 +43,16 @@ function saveKeys(data) {
 }
 
 async function getAllKeysDB() {
-  if (USE_MONGODB) {
+  if (USE_DATABASE) {
     const keys = await db.getAllKeys();
-    return { keys: keys.map(k => k.toObject()) };
+    return { keys };
   } else {
     return loadKeys();
   }
 }
 
 async function findKeyDB(keyValue) {
-  if (USE_MONGODB) {
+  if (USE_DATABASE) {
     return await db.findKeyByValue(keyValue);
   } else {
     const data = loadKeys();
@@ -60,7 +61,7 @@ async function findKeyDB(keyValue) {
 }
 
 async function saveKeyDB(keyData) {
-  if (USE_MONGODB) {
+  if (USE_DATABASE) {
     return await db.createKey(keyData);
   } else {
     const data = loadKeys();
@@ -71,7 +72,7 @@ async function saveKeyDB(keyData) {
 }
 
 async function updateKeyDB(keyValue, updates) {
-  if (USE_MONGODB) {
+  if (USE_DATABASE) {
     return await db.updateKey(keyValue, updates);
   } else {
     const data = loadKeys();
