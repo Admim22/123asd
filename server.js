@@ -4,16 +4,30 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const db = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const KEYS_FILE = path.join(__dirname, 'keys.json');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
+let USE_MONGODB = false;
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// Inicializar banco de dados
+async function initDB() {
+  USE_MONGODB = await db.connectDB();
+  if (USE_MONGODB) {
+    console.log('✅ Usando MongoDB como banco de dados');
+  } else {
+    console.log('⚠️  Usando keys.json como banco de dados (fallback)');
+  }
+}
+
+// Funções de compatibilidade
 function loadKeys() {
   try {
     const data = fs.readFileSync(KEYS_FILE, 'utf8');
@@ -27,19 +41,63 @@ function saveKeys(data) {
   fs.writeFileSync(KEYS_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
+async function getAllKeysDB() {
+  if (USE_MONGODB) {
+    const keys = await db.getAllKeys();
+    return { keys: keys.map(k => k.toObject()) };
+  } else {
+    return loadKeys();
+  }
+}
+
+async function findKeyDB(keyValue) {
+  if (USE_MONGODB) {
+    return await db.findKeyByValue(keyValue);
+  } else {
+    const data = loadKeys();
+    return data.keys.find(k => k.key === keyValue);
+  }
+}
+
+async function saveKeyDB(keyData) {
+  if (USE_MONGODB) {
+    return await db.createKey(keyData);
+  } else {
+    const data = loadKeys();
+    data.keys.push(keyData);
+    saveKeys(data);
+    return keyData;
+  }
+}
+
+async function updateKeyDB(keyValue, updates) {
+  if (USE_MONGODB) {
+    return await db.updateKey(keyValue, updates);
+  } else {
+    const data = loadKeys();
+    const item = data.keys.find(k => k.key === keyValue);
+    if (item) {
+      Object.assign(item, updates);
+      saveKeys(data);
+    }
+    return item;
+  }
+}
+
 function generateKey() {
   const seg = () => Math.random().toString(36).substring(2, 10);
   return `R7D-${seg().toUpperCase()}-${seg().toUpperCase()}-${seg().toUpperCase()}`;
 }
 
 // API: validar key — 1 key = 1 PC (vincula pelo deviceFingerprint no primeiro uso)
-app.post('/api/validate', (req, res) => {
+app.post('/api/validate', async (req, res) => {
   const { licenseKey, deviceFingerprint } = req.body || {};
   const key = (licenseKey || '').trim();
   const fingerprint = (deviceFingerprint || '').trim();
-  const db = loadKeys();
-  const item = db.keys.find(k => k.key === key && k.active);
-  if (!item) {
+  
+  const item = await findKeyDB(key);
+  
+  if (!item || !item.active) {
     return res.json({
       valid: false,
       message: 'Chave inválida ou expirada.'
@@ -53,9 +111,10 @@ app.post('/api/validate', (req, res) => {
   }
   // 1 PC por key: no primeiro uso vincula ao dispositivo; depois só esse PC passa
   if (!item.boundDevice) {
-    item.boundDevice = fingerprint;
-    item.lastUsed = new Date().toISOString();
-    saveKeys(db);
+    await updateKeyDB(key, {
+      boundDevice: fingerprint,
+      lastUsed: new Date().toISOString()
+    });
     return res.json({
       valid: true,
       message: 'Licença ativada com sucesso (1 PC).',
@@ -69,8 +128,9 @@ app.post('/api/validate', (req, res) => {
       message: 'Chave já em uso em outro computador. Uma key vale apenas para 1 PC.'
     });
   }
-  item.lastUsed = new Date().toISOString();
-  saveKeys(db);
+  await updateKeyDB(key, {
+    lastUsed: new Date().toISOString()
+  });
   return res.json({
     valid: true,
     message: 'Licença ativada com sucesso.',
@@ -80,7 +140,7 @@ app.post('/api/validate', (req, res) => {
 });
 
 // API: checar key (validador por dias — protegido por senha)
-app.get('/api/check-key', (req, res) => {
+app.get('/api/check-key', async (req, res) => {
   const auth = req.headers.authorization || '';
   const token = auth.replace('Bearer ', '');
   if (token !== ADMIN_PASSWORD) {
@@ -90,8 +150,7 @@ app.get('/api/check-key', (req, res) => {
   if (!key) {
     return res.json({ valid: false, error: 'Informe a key.' });
   }
-  const db = loadKeys();
-  const item = db.keys.find(k => k.key === key);
+  const item = await findKeyDB(key);
   if (!item) {
     return res.json({
       valid: false,
@@ -131,37 +190,38 @@ app.get('/api/check-key', (req, res) => {
 });
 
 // API: listar keys (protegido por senha)
-app.get('/api/keys', (req, res) => {
+app.get('/api/keys', async (req, res) => {
   const auth = req.headers.authorization || '';
   const token = auth.replace('Bearer ', '');
   if (token !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Não autorizado' });
   }
-  const db = loadKeys();
-  res.json(db.keys);
+  const data = await getAllKeysDB();
+  res.json(data.keys);
 });
 
 // API: gerar nova key (protegido por senha)
-app.post('/api/keys', (req, res) => {
+app.post('/api/keys', async (req, res) => {
   const auth = req.headers.authorization || '';
   const token = auth.replace('Bearer ', '');
   if (token !== ADMIN_PASSWORD) {
     return res.status(401).json({ error: 'Não autorizado' });
   }
   const { days } = req.body || {};
-  const db = loadKeys();
   const key = generateKey();
   const numDays = typeof days === 'number' && days > 0 ? days : (typeof days === 'string' ? parseInt(days, 10) : null);
   const expiresAt = (numDays && numDays > 0) ? new Date(Date.now() + numDays * 24 * 60 * 60 * 1000).toISOString() : null;
-  db.keys.push({
+  
+  const keyData = {
     key,
     active: true,
     createdAt: new Date().toISOString(),
     expiresAt,
     lastUsed: null,
     boundDevice: null
-  });
-  saveKeys(db);
+  };
+  
+  await saveKeyDB(keyData);
   res.json({ key, expiresAt });
 });
 
@@ -178,6 +238,9 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log('Painel r7dev rodando em http://localhost:' + PORT);
+// Iniciar servidor
+initDB().then(() => {
+  app.listen(PORT, () => {
+    console.log('Painel r7dev rodando em http://localhost:' + PORT);
+  });
 });
