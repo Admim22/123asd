@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const db = require('./database-supabase');
+const db = require('./database-supabase-client');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,7 +21,7 @@ app.use(express.static(__dirname));
 async function initDB() {
   USE_DATABASE = db.connectDB();
   if (USE_DATABASE) {
-    console.log('✅ Usando Supabase/PostgreSQL como banco de dados');
+    console.log('✅ Usando Supabase como banco de dados');
     await db.testConnection();
   } else {
     console.log('⚠️  Usando keys.json como banco de dados (fallback)');
