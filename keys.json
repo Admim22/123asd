@@ -1,0 +1,36 @@
+{
+  "keys": [
+    {
+      "key": "R7D-AWC2GPBJ-77R6L5RA-1LEPT2WP",
+      "active": true,
+      "createdAt": "2026-02-05T21:39:00.848Z",
+      "expiresAt": null,
+      "lastUsed": "2026-02-05T21:39:17.530Z",
+      "boundDevice": "PC-UM-123"
+    },
+    {
+      "key": "R7D-QWSG7PAB-GD4DVWPX-RF1S7F5K",
+      "active": true,
+      "createdAt": "2026-02-05T21:41:51.392Z",
+      "expiresAt": "2026-02-07T21:41:51.392Z",
+      "lastUsed": "2026-02-05T21:42:09.818Z",
+      "boundDevice": "PC-TESTE-DIAS"
+    },
+    {
+      "key": "R7D-EXPIRADA-TESTE-KEY",
+      "active": true,
+      "createdAt": "2026-02-01T00:00:00.000Z",
+      "expiresAt": "2026-02-04T00:00:00.000Z",
+      "lastUsed": null,
+      "boundDevice": null
+    },
+    {
+      "key": "R7D-3QM0KHZ2-ZFOCR0UY-AMHNFHV3",
+      "active": true,
+      "createdAt": "2026-02-06T03:59:58.710Z",
+      "expiresAt": null,
+      "lastUsed": "2026-02-06T04:01:41.769Z",
+      "boundDevice": "394ea1f3734661061289bf5f934dde2f"
+    }
+  ]
+}

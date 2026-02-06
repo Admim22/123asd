@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>r7dev - Painel Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+      min-height: 100vh;
+      color: #e4e4e7;
+    }
+    .container { max-width: 720px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; color: #fff; }
+    .sub { color: #71717a; font-size: 0.9rem; margin-bottom: 24px; }
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    input, button {
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.15);
+      font-size: 1rem;
+    }
+    input {
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+    input::placeholder { color: #71717a; }
+    button {
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { background: #4f46e5; }
+    button.secondary { background: rgba(255,255,255,0.1); }
+    button.secondary:hover { background: rgba(255,255,255,0.15); }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .key-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-family: monospace;
+    }
+    .key-row span { word-break: break-all; }
+    .key-row .meta { font-size: 0.8rem; color: #71717a; margin-top: 4px; }
+    .badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; }
+    .badge.ok { background: #22c55e33; color: #22c55e; }
+    .badge.expired { background: #ef444433; color: #ef4444; }
+    .hidden { display: none !important; }
+    .error { color: #ef4444; font-size: 0.9rem; margin-top: 8px; }
+    .success { color: #22c55e; font-size: 0.9rem; margin-top: 8px; }
+    #app-login, #app-panel { transition: opacity 0.2s; }
+    .copy-btn { padding: 6px 12px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>r7dev — Painel Admin</h1>
+    <p class="sub">Gere keys com validade em dias. Uma key = 1 PC. Bypass só com keys deste painel.</p>
+
+    <div id="app-login" class="card">
+      <label>Senha do painel</label>
+      <input type="password" id="login-password" placeholder="Senha (padrão: admin123)">
+      <button id="btn-login">Entrar</button>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+
+    <div id="app-panel" class="hidden">
+      <div class="card">
+        <h2 style="margin-bottom: 12px; font-size: 1.1rem;">Validador de key (dias)</h2>
+        <p class="sub" style="margin-bottom: 12px;">Cole uma key para ver se está válida, quantos dias restam e se já está em 1 PC.</p>
+        <input type="text" id="check-key-input" placeholder="Cole a key (ex: R7D-XXXX-XXXX-XXXX)">
+        <div class="row">
+          <button id="btn-check-key">Verificar</button>
+        </div>
+        <div id="check-result" class="hidden" style="margin-top: 12px; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.2);"></div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom: 12px; font-size: 1.1rem;">Gerar nova key</h2>
+        <label style="display:block; margin-bottom: 4px; font-size: 0.9rem;">Dias de validade (deixe vazio = vitalícia)</label>
+        <input type="number" id="key-days" placeholder="Ex: 7, 30, 365" min="1">
+        <div class="row">
+          <button id="btn-generate">Gerar key</button>
+        </div>
+        <p id="gen-message" class="success hidden"></p>
+        <p id="gen-error" class="error hidden"></p>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-bottom: 12px; font-size: 1.1rem;">Keys geradas</h2>
+        <div id="keys-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = '';
+    let token = sessionStorage.getItem('r7dev_admin_token');
+
+    function show(el, show) {
+      el.classList.toggle('hidden', !show);
+    }
+
+    function api(url, options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...options.headers };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      return fetch(API + url, { ...options, headers }).then(r => r.json());
+    }
+
+    document.getElementById('btn-login').onclick = async () => {
+      const password = document.getElementById('login-password').value.trim();
+      const errEl = document.getElementById('login-error');
+      if (!password) {
+        errEl.textContent = 'Digite a senha.';
+        show(errEl, true);
+        return;
+      }
+      try {
+        const data = await api('/api/login', { method: 'POST', body: JSON.stringify({ password }) });
+        if (data.token) {
+          token = data.token;
+          sessionStorage.setItem('r7dev_admin_token', token);
+          show(document.getElementById('app-login'), false);
+          show(document.getElementById('app-panel'), true);
+          loadKeys();
+        } else {
+          errEl.textContent = 'Senha incorreta.';
+          show(errEl, true);
+        }
+      } catch (e) {
+        errEl.textContent = 'Erro ao conectar. O servidor está rodando? (npm start)';
+        show(errEl, true);
+      }
+    };
+
+    async function loadKeys() {
+      const list = document.getElementById('keys-list');
+      try {
+        const keys = await api('/api/keys');
+        if (!keys.length) {
+          list.innerHTML = '<p class="sub">Nenhuma key ainda. Gere uma acima.</p>';
+          return;
+        }
+        list.innerHTML = keys.map(k => {
+          const exp = k.expiresAt ? new Date(k.expiresAt) : null;
+          const now = new Date();
+          const isExp = exp && exp < now;
+          let daysText = '';
+          if (exp && !isExp) {
+            const daysLeft = Math.max(0, Math.ceil((exp - now) / (24 * 60 * 60 * 1000)));
+            daysText = ' · ' + daysLeft + ' dia(s) restante(s)';
+          } else if (exp && isExp) {
+            daysText = ' · Expirada';
+          } else {
+            daysText = ' · Vitalícia';
+          }
+          const bound = k.boundDevice ? '1 PC' : 'Livre';
+          return `
+            <div class="key-row">
+              <div>
+                <span>${k.key}</span>
+                <div class="meta">
+                  Criada: ${new Date(k.createdAt).toLocaleString('pt-BR')}
+                  ${exp ? ' · Expira: ' + exp.toLocaleDateString('pt-BR') : ''}${daysText}
+                  · ${bound}
+                  ${k.lastUsed ? ' · Último uso: ' + new Date(k.lastUsed).toLocaleString('pt-BR') : ''}
+                </div>
+              </div>
+              <div class="row">
+                <span class="badge ${isExp ? 'expired' : 'ok'}">${isExp ? 'Expirada' : 'Ativa'}</span>
+                <button class="copy-btn secondary" data-key="${k.key}">Copiar</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+        list.querySelectorAll('.copy-btn').forEach(btn => {
+          btn.onclick = () => {
+            navigator.clipboard.writeText(btn.dataset.key);
+            btn.textContent = 'Copiado!';
+            setTimeout(() => btn.textContent = 'Copiar', 1500);
+          };
+        });
+      } catch (e) {
+        list.innerHTML = '<p class="error">Erro ao carregar keys.</p>';
+      }
+    }
+
+    document.getElementById('btn-check-key').onclick = async () => {
+      const keyInput = document.getElementById('check-key-input').value.trim();
+      const resultEl = document.getElementById('check-result');
+      show(resultEl, true);
+      if (!keyInput) {
+        resultEl.innerHTML = '<span class="error">Informe a key.</span>';
+        return;
+      }
+      try {
+        const data = await api('/api/check-key?key=' + encodeURIComponent(keyInput));
+        if (data.error) {
+          resultEl.innerHTML = '<span class="error">' + data.error + '</span>';
+          return;
+        }
+        const validClass = data.valid ? 'success' : 'error';
+        let html = '<p class="' + validClass + '"><strong>' + (data.valid ? 'Válida' : 'Inválida / Expirada') + '</strong></p>';
+        html += '<p class="sub">' + data.message + '</p>';
+        if (data.expiresAt) {
+          const exp = new Date(data.expiresAt);
+          html += '<p class="sub">Expira em: ' + exp.toLocaleString('pt-BR') + '</p>';
+        }
+        html += '<p class="sub">Dispositivo: ' + (data.boundDevice ? 'Vinculado a 1 PC' : 'Livre') + '</p>';
+        resultEl.innerHTML = html;
+      } catch (e) {
+        resultEl.innerHTML = '<span class="error">Erro ao verificar.</span>';
+      }
+    };
+
+    document.getElementById('btn-generate').onclick = async () => {
+      const days = document.getElementById('key-days').value ? parseInt(document.getElementById('key-days').value, 10) : null;
+      const msgEl = document.getElementById('gen-message');
+      const errEl = document.getElementById('gen-error');
+      show(msgEl, false);
+      show(errEl, false);
+      try {
+        const data = await api('/api/keys', {
+          method: 'POST',
+          body: JSON.stringify(days ? { days } : {})
+        });
+        if (data.key) {
+          msgEl.textContent = 'Key gerada: ' + data.key + ' (copie abaixo)';
+          show(msgEl, true);
+          document.getElementById('key-days').value = '';
+          loadKeys();
+        }
+      } catch (e) {
+        errEl.textContent = 'Erro ao gerar key.';
+        show(errEl, true);
+      }
+    };
+
+    if (token) {
+      show(document.getElementById('app-login'), false);
+      show(document.getElementById('app-panel'), true);
+      loadKeys();
+    }
+  </script>
+</body>
+</html>

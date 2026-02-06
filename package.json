@@ -1,0 +1,14 @@
+{
+  "name": "r7dev-painel-admin",
+  "version": "1.0.0",
+  "description": "Painel admin para gerar e validar keys da extensão r7dev",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  }
+}
